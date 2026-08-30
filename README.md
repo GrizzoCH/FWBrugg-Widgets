@@ -1,2 +1,2 @@
 # FWBrugg-Widgets
-Widget repository for basic embedding provision MeteSchweiz
+Widget repository for basic embedding provision MeteoSchweiz
