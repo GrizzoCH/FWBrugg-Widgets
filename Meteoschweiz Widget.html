@@ -1,0 +1,76 @@
+<div id="meteoswiss-widget" style="font-family: Arial, Helvetica, sans-serif; max-width: 650px; border: 1px solid #e0e0e0; border-radius: 8px; padding: 16px; background: #ffffff; box-shadow: 0 4px 6px rgba(0,0,0,0.05);">
+  <h3 style="margin-top: 0; margin-bottom: 15px; color: #eb0000; font-size: 18px; font-weight: 600;">
+    Wetter Brugg (AG) – 48 Stunden
+  </h3>
+  
+  <div id="ms-forecast-container" style="display: flex; gap: 8px; overflow-x: auto; padding-bottom: 10px; scroll-behavior: smooth;">
+    <p style="color: #666; font-size: 14px;">Lade Wetterdaten...</p>
+  </div>
+  
+  <div style="font-size: 10px; color: #999; text-align: right; margin-top: 8px;">
+    Modell: Hochauflösend (inkl. MeteoSwiss) via Open-Meteo
+  </div>
+</div>
+
+<script>
+async function loadMeteoSwissHourlyWidget() {
+  const lat = 47.48;
+  const lon = 8.21;
+  
+  // FIXED: Removed the invalid 'models' parameter. 
+  // Open-Meteo automatically uses the best MeteoSwiss model for Swiss coordinates.
+  const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=temperature_2m,weather_code&forecast_hours=48&timezone=Europe%2FBerlin`;
+
+  const container = document.getElementById('ms-forecast-container');
+
+  try {
+    const response = await fetch(url);
+    const data = await response.json();
+    
+    if (data.error) {
+       console.error("API Error:", data.reason);
+       container.innerHTML = `<p style="color: red; font-size: 14px;">API-Fehler: ${data.reason}</p>`;
+       return;
+    }
+
+    container.innerHTML = ''; 
+
+    const getIcon = (code) => {
+      if (code <= 1) return '☀️'; 
+      if (code <= 3) return '⛅'; 
+      if (code <= 48) return '🌫️'; 
+      if (code <= 57) return '🌧️'; 
+      if (code <= 67) return '🌧️'; 
+      if (code <= 77) return '❄️'; 
+      if (code <= 82) return '🌦️'; 
+      return '⛈️'; 
+    };
+
+    const days = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'];
+
+    for (let i = 0; i < data.hourly.time.length; i++) {
+      const date = new Date(data.hourly.time[i]);
+      const dayName = days[date.getDay()];
+      const hours = String(date.getHours()).padStart(2, '0') + ':00';
+      const temp = Math.round(data.hourly.temperature_2m[i]);
+      const icon = getIcon(data.hourly.weather_code[i]);
+
+      const hourDiv = document.createElement('div');
+      hourDiv.style.cssText = 'flex: 0 0 60px; text-align: center; background: #f8f9fa; padding: 10px 4px; border-radius: 6px; border: 1px solid #f0f0f0;';
+      
+      hourDiv.innerHTML = `
+        <div style="font-size: 11px; color: #888; font-weight: 600;">${dayName}</div>
+        <div style="font-size: 12px; font-weight: 600; margin-bottom: 6px; color: #333;">${hours}</div>
+        <div style="font-size: 20px; margin-bottom: 6px;">${icon}</div>
+        <div style="font-size: 14px; color: #eb0000; font-weight: 700;">${temp}°</div>
+      `;
+      container.appendChild(hourDiv);
+    }
+  } catch (error) {
+    console.error("Fetch Error:", error);
+    container.innerHTML = '<p style="color: red; font-size: 14px;">Netzwerkfehler beim Laden der Wetterdaten.</p>';
+  }
+}
+
+loadMeteoSwissHourlyWidget();
+</script>
