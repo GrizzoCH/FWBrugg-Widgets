@@ -1,0 +1,119 @@
+<div style="width: 100%; max-width: 500px; margin: 0 auto; border: 1px solid #e0e0e0; border-radius: 8px; overflow: hidden; font-family: Arial, sans-serif; background: #fff; box-shadow: 0 4px 6px rgba(0,0,0,0.05); display: flex; flex-direction: column; box-sizing: border-box;">
+  
+  <!-- Header -->
+  <div style="background: #eb0000; color: white; padding: 14px 18px; font-weight: bold; font-size: 15px; display: flex; justify-content: space-between; align-items: center;">
+    <span>Lokalprognose Brugg (AG)</span>
+    <span style="font-size: 13px; font-weight: normal; opacity: 0.95;">7 Tage &bull; <span id="ms-7d-updated">--:--</span></span>
+  </div>
+  
+  <!-- Main Body: 7-Day List -->
+  <div id="ms-7d-list" style="display: flex; flex-direction: column; padding: 10px 18px; background: #fdfdfd;">
+    <div style="text-align: center; padding: 20px; color: #888; font-size: 14px;">Lade Daten...</div>
+  </div>
+
+  <!-- Footer -->
+  <div style="padding: 10px 14px; font-size: 11px; color: #777; text-align: right; background: #f8f9fa; border-top: 1px solid #eee;">
+    Daten: Open-Meteo (MeteoSwiss Modell)
+  </div>
+</div>
+
+<script>
+async function loadMinimal7DayForecast() {
+  const lat = 47.48;
+  const lon = 8.21;
+  const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&daily=weathercode,temperature_2m_max,temperature_2m_min,precipitation_sum,precipitation_probability_max&timezone=Europe%2FBerlin`;
+
+  try {
+    const response = await fetch(url);
+    const data = await response.json();
+    
+    if (data.error) {
+       console.error("API Error:", data.reason);
+       document.getElementById('ms-7d-list').innerHTML = `<div style="color: red; padding: 10px;">Fehler beim Laden der Daten.</div>`;
+       return;
+    }
+
+    const daily = data.daily;
+    const globalMin = Math.min(...daily.temperature_2m_min);
+    const globalMax = Math.max(...daily.temperature_2m_max);
+    const tempRange = Math.max(globalMax - globalMin, 1);
+
+    const now = new Date();
+    document.getElementById('ms-7d-updated').textContent = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
+
+    const getIcon = (code) => {
+      if (code <= 1) return '☀️'; 
+      if (code <= 3) return '⛅'; 
+      if (code <= 48) return '🌫️'; 
+      if (code <= 57) return '🌧️'; 
+      if (code <= 67) return '🌧️'; 
+      if (code <= 77) return '❄️'; 
+      if (code <= 82) return '🌦️'; 
+      return '⛈️'; 
+    };
+
+    const daysMap = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'];
+    const listContainer = document.getElementById('ms-7d-list');
+    listContainer.innerHTML = '';
+
+    for (let i = 0; i < 7; i++) {
+      const date = new Date(daily.time[i]);
+      let dayName = daysMap[date.getDay()];
+      
+      // Override today and tomorrow for better UX
+      if (i === 0) dayName = 'Heute';
+      if (i === 1) dayName = 'Morgen';
+
+      const tMin = Math.round(daily.temperature_2m_min[i]);
+      const tMax = Math.round(daily.temperature_2m_max[i]);
+      const precipSum = daily.precipitation_sum[i];
+      const precipProb = daily.precipitation_probability_max[i];
+      const icon = getIcon(daily.weathercode[i]);
+
+      // Calculate bar positioning
+      const leftPct = ((tMin - globalMin) / tempRange) * 100;
+      const widthPct = Math.max(((tMax - tMin) / tempRange) * 100, 3); // minimum 3% width for visibility
+
+      let rainText = '';
+      if (precipProb > 15 || precipSum > 0) {
+        rainText = `<div style="font-size: 10px; color: #0070c0; font-weight: bold; margin-top: 2px;">${precipProb}%</div>`;
+      }
+
+      const row = document.createElement('div');
+      row.style.cssText = `
+        display: flex; 
+        align-items: center; 
+        padding: 10px 0; 
+        border-bottom: ${i < 6 ? '1px solid #eee' : 'none'};
+      `;
+      
+      row.innerHTML = `
+        <div style="width: 55px; font-weight: bold; color: #444; font-size: 14px;">
+          ${dayName}
+        </div>
+        <div style="width: 45px; text-align: center; display: flex; flex-direction: column; align-items: center; justify-content: center;">
+          <span style="font-size: 20px; line-height: 1;">${icon}</span>
+          ${rainText}
+        </div>
+        <div style="width: 30px; text-align: right; color: #555; font-size: 14px;">
+          ${tMin}°
+        </div>
+        <div style="flex-grow: 1; margin: 0 12px; height: 6px; background: #e0e0e0; border-radius: 3px; position: relative; overflow: hidden;">
+          <div style="position: absolute; left: ${leftPct}%; width: ${widthPct}%; height: 100%; border-radius: 3px; background: linear-gradient(90deg, #99c2ff, #ff6666);"></div>
+        </div>
+        <div style="width: 30px; text-align: left; color: #222; font-size: 14px; font-weight: bold;">
+          ${tMax}°
+        </div>
+      `;
+      listContainer.appendChild(row);
+    }
+
+  } catch (error) {
+    console.error("Fetch Error:", error);
+    document.getElementById('ms-7d-list').innerHTML = `<div style="color: #eb0000; padding: 10px;">Verbindungsfehler</div>`;
+  }
+}
+
+loadMinimal7DayForecast();
+setInterval(loadMinimal7DayForecast, 1800000);
+</script>
