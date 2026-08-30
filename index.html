@@ -1,0 +1,209 @@
+<!-- Load Chart.js from CDN -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<!-- Load Chart.js DataLabels Plugin -->
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2"></script>
+
+<!-- Widget Container -->
+<div style="max-width: 750px; border: 1px solid #e0e0e0; border-radius: 8px; overflow: hidden; font-family: Arial, sans-serif; background: #fff; box-shadow: 0 4px 6px rgba(0,0,0,0.05);">
+  
+  <!-- Header -->
+  <div style="background: #eb0000; color: white; padding: 12px 16px; font-weight: bold; display: flex; justify-content: space-between; align-items: center;">
+    <span>Lokalprognose Brugg (AG)</span>
+    <span style="font-size: 12px; font-weight: normal; opacity: 0.9;">Nächste 24h &bull; Aktualisiert: <span id="ms-last-updated">--:--</span></span>
+  </div>
+  
+  <!-- Scrollable Area -->
+  <div style="overflow-x: auto; overflow-y: hidden; background: #fdfdfd; scroll-behavior: smooth;">
+    
+    <!-- Fixed width canvas area to allow scrolling (50px per hour * 24 hours = 1200px) -->
+    <div style="width: 1200px; position: relative;">
+      
+      <!-- Top Bar Row: Dedicated DOM container for Weather Icons and Hours -->
+      <div id="ms-top-bar" style="display: flex; height: 45px; border-bottom: 1px solid #eee; background: #fff;">
+        <!-- JavaScript injects icon columns here -->
+      </div>
+      
+      <!-- Graph Area -->
+      <div style="height: 200px; position: relative;">
+        <canvas id="ms-chart"></canvas>
+      </div>
+      
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <div style="padding: 8px 12px; font-size: 10px; color: #999; text-align: right; background: #f8f9fa; border-top: 1px solid #eee;">
+    Daten: Open-Meteo (MeteoSwiss Modell)
+  </div>
+</div>
+
+<script>
+let weatherChartInstance = null;
+
+async function loadMeteoSwissGraphWidget() {
+  const lat = 47.48;
+  const lon = 8.21;
+  
+  const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=temperature_2m,precipitation,precipitation_probability,weather_code&forecast_hours=24&timezone=Europe%2FBerlin`;
+
+  try {
+    const response = await fetch(url);
+    const data = await response.json();
+    
+    if (data.error) {
+       console.error("API Error:", data.reason);
+       return;
+    }
+
+    const times = data.hourly.time;
+    const temps = data.hourly.temperature_2m;
+    const precip = data.hourly.precipitation;
+    const precipProb = data.hourly.precipitation_probability;
+    const codes = data.hourly.weather_code;
+
+    // Update the timestamp in the header to HH:MM format
+    const now = new Date();
+    const updateHours = String(now.getHours()).padStart(2, '0');
+    const updateMinutes = String(now.getMinutes()).padStart(2, '0');
+    document.getElementById('ms-last-updated').textContent = `${updateHours}:${updateMinutes}`;
+
+    const getIcon = (code) => {
+      if (code <= 1) return '☀️'; 
+      if (code <= 3) return '⛅'; 
+      if (code <= 48) return '🌫️'; 
+      if (code <= 57) return '🌧️'; 
+      if (code <= 67) return '🌧️'; 
+      if (code <= 77) return '❄️'; 
+      if (code <= 82) return '🌦️'; 
+      return '⛈️'; 
+    };
+
+    // Populate top bar
+    const topBarContainer = document.getElementById('ms-top-bar');
+    topBarContainer.innerHTML = '';
+    
+    times.forEach((timeStr, i) => {
+      const date = new Date(timeStr);
+      const hours = String(date.getHours()).padStart(2, '0');
+      const minutes = String(date.getMinutes()).padStart(2, '0');
+      const timeFormatted = `${hours}:${minutes}`;
+      
+      const col = document.createElement('div');
+      col.style.cssText = 'flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 11px;';
+      col.innerHTML = `
+        <div style="font-size: 14px; line-height: 1.1;">${getIcon(codes[i])}</div>
+        <div style="font-weight: 600; color: #555; margin-top: 2px;">${timeFormatted}</div>
+      `;
+      topBarContainer.appendChild(col);
+    });
+
+    const ctx = document.getElementById('ms-chart').getContext('2d');
+    
+    if (weatherChartInstance) {
+      weatherChartInstance.destroy();
+    }
+    
+    weatherChartInstance = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: times.map(t => {
+          const d = new Date(t);
+          return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+        }),
+        datasets: [
+          {
+            label: 'Temperatur (°C)',
+            data: temps,
+            borderColor: '#eb0000',
+            backgroundColor: 'rgba(235, 0, 0, 0.08)',
+            borderWidth: 2,
+            pointRadius: 3,
+            pointHoverRadius: 6,
+            fill: true,
+            yAxisID: 'yTemp',
+            tension: 0.4,
+            datalabels: {
+              align: 'top',
+              anchor: 'end',
+              color: '#eb0000',
+              font: { weight: 'bold', size: 11 },
+              formatter: (value) => Math.round(value) + '°'
+            }
+          },
+          {
+            label: 'Niederschlagswahrscheinlichkeit (%)',
+            data: precipProb,
+            type: 'bar',
+            backgroundColor: 'rgba(0, 112, 192, 0.4)',
+            borderWidth: 0,
+            yAxisID: 'yProb',
+            barPercentage: 0.8,
+            categoryPercentage: 0.9,
+            datalabels: {
+              align: 'end',
+              anchor: 'start',
+              color: '#0070c0',
+              font: { weight: 'bold', size: 10 },
+              formatter: (value) => value > 5 ? value + '%' : ''
+            }
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        layout: { padding: { top: 25, right: 30, bottom: 10 } },
+        interaction: { mode: 'index', intersect: false },
+        plugins: {
+          legend: { display: false },
+          datalabels: { display: true },
+          tooltip: {
+            backgroundColor: 'rgba(255, 255, 255, 0.95)',
+            titleColor: '#333',
+            bodyColor: '#333',
+            borderColor: '#ccc',
+            borderWidth: 1,
+            padding: 10,
+            callbacks: {
+              title: (tooltipItems) => 'Uhrzeit: ' + tooltipItems[0].label,
+              label: (context) => {
+                if (context.datasetIndex === 0) {
+                  return `Temperatur: ${Math.round(context.raw)}°C`;
+                } else {
+                  const index = context.dataIndex;
+                  const mm = precip[index] || 0;
+                  return `Regenwahrscheinlichkeit: ${context.raw}% (${mm} mm)`;
+                }
+              }
+            }
+          }
+        },
+        scales: {
+          x: { display: false, offset: true },
+          yTemp: {
+            display: false,
+            suggestedMin: Math.min(...temps) - 5,
+            suggestedMax: Math.max(...temps) + 7 
+          },
+          yProb: {
+            display: false,
+            position: 'right',
+            beginAtZero: true,
+            max: 100 
+          }
+        }
+      },
+      plugins: [ChartDataLabels]
+    });
+
+  } catch (error) {
+    console.error("Fetch Error:", error);
+  }
+}
+
+// Initial load
+loadMeteoSwissGraphWidget();
+
+// Auto-refresh every 30 minutes
+setInterval(loadMeteoSwissGraphWidget, 1800000);
+</script>
