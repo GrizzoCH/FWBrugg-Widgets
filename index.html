@@ -1,27 +1,54 @@
+<!-- Load Chart.js from CDN -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<!-- Load Chart.js DataLabels Plugin -->
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2"></script>
 
+<!-- Widget Container: Fluid layout -->
 <div style="width: 100%; height: 100%; min-height: 320px; border: 1px solid #e0e0e0; border-radius: 8px; overflow: hidden; font-family: Arial, sans-serif; background: #fff; box-shadow: 0 4px 6px rgba(0,0,0,0.05); display: flex; flex-direction: column; box-sizing: border-box;">
   
+  <!-- Header -->
   <div style="background: #eb0000; color: white; padding: 14px 18px; font-weight: bold; font-size: 15px; display: flex; justify-content: space-between; align-items: center; flex-shrink: 0;">
     <span>Lokalprognose Brugg (AG)</span>
     <span style="font-size: 13px; font-weight: normal; opacity: 0.95;">Nächste 24h &bull; Aktualisiert: <span id="ms-last-updated">--:--</span></span>
   </div>
   
-  <div style="flex-grow: 1; overflow-x: auto; overflow-y: hidden; background: #fdfdfd; scroll-behavior: smooth; display: flex; flex-direction: column;">
+  <!-- Main Body Container with Pinched Fixed Side Axes -->
+  <div style="flex-grow: 1; display: flex; flex-direction: column; background: #fdfdfd; overflow: hidden; position: relative;">
     
-    <div style="min-width: 1440px; width: 100%; flex-grow: 1; display: flex; flex-direction: column; position: relative;">
+    <!-- Middle Wrapper holding Pinned Left Axis, Scrollable Chart Body + Top Bar, and Pinned Right Axis -->
+    <div style="flex-grow: 1; display: flex; position: relative; overflow: hidden;">
       
-      <div id="ms-top-bar" style="display: flex; height: 50px; border-bottom: 1px solid #eee; background: #fff; flex-shrink: 0; margin-left: 55px; margin-right: 55px;">
-        </div>
-      
-      <div style="flex-grow: 1; min-height: 220px; position: relative;">
-        <canvas id="ms-chart" style="display: block; width: 100%; height: 100%;"></canvas>
+      <!-- Pinned Left Axis (Temperature °C) -->
+      <div id="pinned-left-axis" style="width: 55px; background: #fff; border-right: 1px solid #eee; display: flex; flex-direction: column; justify-content: space-between; flex-shrink: 0; z-index: 5; pointer-events: none; padding: 50px 0 5px 0; box-sizing: border-box; text-align: right;">
+        <!-- Injected via JS -->
       </div>
-      
+
+      <!-- Scrollable container containing both the Top Bar and Main Chart Canvas together -->
+      <div id="scrollable-pane" style="flex-grow: 1; overflow-x: auto; overflow-y: hidden; scroll-behavior: smooth;">
+        <div id="chart-scroll-wrapper" style="height: 100%; display: flex; flex-direction: column; position: relative;">
+          
+          <!-- Top Bar Row: Weather Icons and Hours -->
+          <div id="ms-top-bar" style="display: flex; height: 50px; border-bottom: 1px solid #eee; background: #fff; flex-shrink: 0;">
+            <!-- JavaScript injects icon columns here -->
+          </div>
+          
+          <!-- Graph Area -->
+          <div style="flex-grow: 1; min-height: 220px; position: relative;">
+            <canvas id="ms-chart" style="display: block; width: 100%; height: 100%;"></canvas>
+          </div>
+          
+        </div>
+      </div>
+
+      <!-- Pinned Right Axis (Precipitation mm) -->
+      <div id="pinned-right-axis" style="width: 55px; background: #fff; border-left: 1px solid #eee; display: flex; flex-direction: column; justify-content: space-between; flex-shrink: 0; z-index: 5; pointer-events: none; padding: 50px 0 5px 0; box-sizing: border-box; text-align: left;">
+        <!-- Injected via JS -->
+      </div>
+
     </div>
   </div>
 
+  <!-- Footer -->
   <div style="padding: 10px 14px; font-size: 11px; color: #777; text-align: right; background: #f8f9fa; border-top: 1px solid #eee; flex-shrink: 0;">
     Daten: Open-Meteo (MeteoSwiss Modell)
   </div>
@@ -67,6 +94,7 @@ async function loadMeteoSwissGraphWidget() {
       return '⛈️'; 
     };
 
+    // Populate top bar
     const topBarContainer = document.getElementById('ms-top-bar');
     topBarContainer.innerHTML = '';
     
@@ -85,10 +113,25 @@ async function loadMeteoSwissGraphWidget() {
       topBarContainer.appendChild(col);
     });
 
+    // Set scrollable inner container width dynamically (approx 65px per hour column)
+    const scrollWrapper = document.getElementById('chart-scroll-wrapper');
+    scrollWrapper.style.width = `${Math.max(times.length * 65, 1200)}px`;
+
     const dynamicBackgroundColors = precipProb.map(prob => {
-      const alpha = Math.max(0.15, (prob / 100) * 0.9);
+      const alpha = Math.max(0.1, (prob / 100) * 0.9);
       return `rgba(0, 112, 192, ${alpha})`;
     });
+
+    // Calculate nice rounded 5-unit bounds for temperature
+    const minTemp = Math.min(...temps);
+    const maxTemp = Math.max(...temps);
+    const tempMin = Math.floor((minTemp - 3) / 5) * 5;
+    const tempMax = Math.ceil((maxTemp + 3) / 5) * 5;
+
+    // Calculate nice rounded 5-unit bounds for precipitation
+    const maxPrecip = Math.max(...precip);
+    const rainMax = Math.max(5, Math.ceil((maxPrecip * 1.2) / 5) * 5);
+    const rainMin = 0;
 
     const ctx = document.getElementById('ms-chart').getContext('2d');
     
@@ -152,7 +195,7 @@ async function loadMeteoSwissGraphWidget() {
       options: {
         responsive: true,
         maintainAspectRatio: false,
-        layout: { padding: { top: 35, right: 15, bottom: 10 } },
+        layout: { padding: { top: 35, right: 10, bottom: 5, left: 10 } },
         interaction: { mode: 'index', intersect: false },
         plugins: {
           legend: { display: false },
@@ -185,34 +228,38 @@ async function loadMeteoSwissGraphWidget() {
           x: { display: false, offset: true },
           yTemp: {
             type: 'linear',
-            display: true,
-            position: 'left',
-            grid: { drawOnChartArea: false },
-            ticks: {
-              font: { size: 11, weight: '500' },
-              color: '#555',
-              callback: (value) => value + '°C'
-            },
-            suggestedMin: Math.min(...temps) - 5,
-            suggestedMax: Math.max(...temps) + 9 
+            display: false,
+            min: tempMin,
+            max: tempMax
           },
           yRain: {
             type: 'linear',
-            display: true,
-            position: 'right',
-            grid: { drawOnChartArea: false },
-            ticks: {
-              font: { size: 11, weight: '500' },
-              color: '#555',
-              callback: (value) => value + ' mm'
-            },
-            beginAtZero: true,
-            suggestedMax: Math.max(...precip) < 2 ? 6 : Math.max(...precip) * 3.2 
+            display: false,
+            min: rainMin,
+            max: rainMax
           }
         }
       },
       plugins: [ChartDataLabels]
     });
+
+    // Generate step-of-5 side axis markers dynamically from bottom to top
+    const leftAxisEl = document.getElementById('pinned-left-axis');
+    const rightAxisEl = document.getElementById('pinned-right-axis');
+
+    let leftHTML = `<div style="font-size: 10px; font-weight: bold; color: #777; padding-left: 6px;">°C</div>`;
+    for (let val = tempMax; val >= tempMin; val -= 5) {
+      leftHTML += `<div style="font-size: 11px; color: #555; padding-right: 8px;">${val}°</div>`;
+    }
+    leftHTML += `<div style="height: 5px;"></div>`;
+    leftAxisEl.innerHTML = leftHTML;
+
+    let rightHTML = `<div style="font-size: 10px; font-weight: bold; color: #777; padding-left: 8px;">mm</div>`;
+    for (let val = rainMax; val >= rainMin; val -= 5) {
+      rightHTML += `<div style="font-size: 11px; color: #555; padding-left: 8px;">${val}</div>`;
+    }
+    rightHTML += `<div style="height: 5px;"></div>`;
+    rightAxisEl.innerHTML = rightHTML;
 
   } catch (error) {
     console.error("Fetch Error:", error);
