@@ -1,20 +1,29 @@
+<!-- Load Chart.js from CDN -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<!-- Load Chart.js DataLabels Plugin -->
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2"></script>
 
+<!-- Widget Container: Fluid layout adapting fully to its embedding space -->
 <div style="width: 100%; height: 100%; min-height: 300px; border: 1px solid #e0e0e0; border-radius: 8px; overflow: hidden; font-family: Arial, sans-serif; background: #fff; box-shadow: 0 4px 6px rgba(0,0,0,0.05); display: flex; flex-direction: column; box-sizing: border-box;">
   
+  <!-- Header -->
   <div style="background: #eb0000; color: white; padding: 12px 16px; font-weight: bold; display: flex; justify-content: space-between; align-items: center; flex-shrink: 0;">
     <span>Lokalprognose Brugg (AG)</span>
     <span style="font-size: 12px; font-weight: normal; opacity: 0.9;">Nächste 24h &bull; Aktualisiert: <span id="ms-last-updated">--:--</span></span>
   </div>
   
+  <!-- Scrollable Area -->
   <div style="flex-grow: 1; overflow-x: auto; overflow-y: hidden; background: #fdfdfd; scroll-behavior: smooth; display: flex; flex-direction: column;">
     
+    <!-- Dynamic inner container that scales based on item count (approx 55px per hour for 24 hours = 1320px min-width) -->
     <div style="min-width: 1320px; width: 100%; flex-grow: 1; display: flex; flex-direction: column; position: relative;">
       
+      <!-- Top Bar Row: Dedicated DOM container for Weather Icons and Hours -->
       <div id="ms-top-bar" style="display: flex; height: 45px; border-bottom: 1px solid #eee; background: #fff; flex-shrink: 0;">
-        </div>
+        <!-- JavaScript injects icon columns here -->
+      </div>
       
+      <!-- Graph Area filling remaining vertical space -->
       <div style="flex-grow: 1; min-height: 200px; position: relative;">
         <canvas id="ms-chart" style="display: block; width: 100%; height: 100%;"></canvas>
       </div>
@@ -22,6 +31,7 @@
     </div>
   </div>
 
+  <!-- Footer -->
   <div style="padding: 8px 12px; font-size: 10px; color: #999; text-align: right; background: #f8f9fa; border-top: 1px solid #eee; flex-shrink: 0;">
     Daten: Open-Meteo (MeteoSwiss Modell)
   </div>
@@ -85,6 +95,13 @@ async function loadMeteoSwissGraphWidget() {
       topBarContainer.appendChild(col);
     });
 
+    // Map each bar's background color dynamically so its opacity reflects the probability percentage (0 to 1)
+    const dynamicBackgroundColors = precipProb.map(prob => {
+      // Ensure minimum visibility (e.g. at least 0.15 opacity) so low probabilities are still slightly discernible if mm > 0
+      const alpha = Math.max(0.15, prob / 100);
+      return `rgba(0, 112, 192, ${alpha})`;
+    });
+
     const ctx = document.getElementById('ms-chart').getContext('2d');
     
     if (weatherChartInstance) {
@@ -122,7 +139,7 @@ async function loadMeteoSwissGraphWidget() {
             label: 'Niederschlag (mm)',
             data: precip,
             type: 'bar',
-            backgroundColor: 'rgba(0, 112, 192, 0.5)',
+            backgroundColor: dynamicBackgroundColors,
             borderWidth: 0,
             yAxisID: 'yRain',
             barPercentage: 0.8,
@@ -135,8 +152,8 @@ async function loadMeteoSwissGraphWidget() {
               formatter: (value, context) => {
                 const index = context.dataIndex;
                 const prob = precipProb[index] || 0;
-                // Show both mm and probability if there is expected precipitation (> 0.0mm or > 10% chance)
-                if (value > 0.0 || prob > 10) {
+                // Show amount in mm and probability if there is actual recorded precipitation or notable chance
+                if (value > 0.0 || prob > 15) {
                   return `${value > 0 ? value + 'mm' : ''} (${prob}%)`;
                 }
                 return '';
@@ -186,7 +203,6 @@ async function loadMeteoSwissGraphWidget() {
             display: false,
             position: 'right',
             beginAtZero: true,
-            // Scale bar heights relative to precipitation amount, ensuring space for data labels at the top
             suggestedMax: Math.max(...precip) < 2 ? 6 : Math.max(...precip) * 3 
           }
         }
